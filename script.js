@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+
+<html lang="zh-TW">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Papago - 旅遊軌跡紀錄器</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <style>
+
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        .tab-shadow { box-shadow: 0 -4px 10px rgba(0,0,0,0.03); }
+
+    </style>
+
+</head>
+
+<body class="h-screen overflow-hidden">
+
+    <div id="app" class="h-full flex flex-col max-w-md mx-auto bg-white shadow-2xl relative overflow-hidden">
+
+        
+
+        <!-- App Bar: Papago Title -->
+
+        <header class="bg-indigo-600 text-white p-5 shrink-0 z-30 flex justify-between items-center">
+
+            <h1 class="text-2xl font-black tracking-tighter italic">PAPAGO</h1>
+
+            <div class="flex gap-3">
+
+                <button @click="showTripList = true" class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+
+                    <i class="fa-solid fa-earth-asia"></i>
+
+                </button>
+
+            </div>
+
+        </header>
+
+        <!-- Main Content Area -->
+
+        <main class="flex-1 overflow-y-auto no-scrollbar pb-24" v-if="currentTrip && currentTrip.id">
+
+            
+
+            <!-- 旅程概覽卡片 -->
+
+            <div class="p-5 bg-gradient-to-b from-indigo-600 to-indigo-50 text-white rounded-b-[2rem] mb-6">
+
+                <div class="flex justify-between items-end mb-4">
+
+                    <div>
+
+                        <p class="text-xs opacity-70">當前探索旅程</p>
+
+                        <h2 class="text-2xl font-bold">{{ currentTrip.destination }}</h2>
+
+                    </div>
+
+                    <div class="text-right">
+
+                        <p class="text-xs opacity-70">總開銷 (台幣)</p>
+
+                        <p class="text-xl font-black">NT$ {{ totalExpensesTWD }}</p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- 分頁切換內容 -->
+
+            <div class="px-5 space-y-6">
+
+                
+
+                <!-- 行程分頁 -->
+
+                <div v-if="activeTab === 'routes'" class="animate-slide-up">
+
+                    <div class="flex overflow-x-auto gap-3 no-scrollbar mb-4">
+
+                        <div v-for="(day, idx) in currentTrip.days" :key="idx" 
+
+                             @click="selectedDayIdx = idx"
+
+                             class="shrink-0 w-14 h-16 rounded-2xl flex flex-col items-center justify-center transition-all border-2"
+
+                             :class="selectedDayIdx === idx ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-gray-100 text-gray-400'">
+
+                            <span class="text-[8px] font-bold">DAY</span>
+
+                            <span class="text-lg font-bold">{{ idx + 1 }}</span>
+
+                        </div>
+
+                        <button @click="addNewDay" class="shrink-0 w-14 h-16 rounded-2xl border-2 border-dashed border-gray-200 text-gray-300">+</button>
+
+                    </div>
+
+                    <!-- 天氣與相簿連結 -->
+
+                    <div class="grid grid-cols-2 gap-3 mb-6" v-if="currentDay">
+
+                        <div @click="getAiWeather(selectedDayIdx)" class="bg-blue-50 p-4 rounded-2xl border border-blue-100 relative cursor-pointer group">
+
+                            <h4 class="text-[10px] font-bold text-blue-400 mb-1">AI 穿搭氣象</h4>
+
+                            <p class="text-xs font-bold text-blue-700">{{ currentDay.weather?.temp || '點擊獲取' }}</p>
+
+                            <i class="fa-solid fa-wand-magic-sparkles absolute right-3 top-3 text-blue-200 group-hover:text-blue-400 transition"></i>
+
+                        </div>
+
+                        <div class="bg-purple-50 p-4 rounded-2xl border border-purple-100">
+
+                            <h4 class="text-[10px] font-bold text-purple-400 mb-1">照片紀錄連結</h4>
+
+                            <input v-model="currentDay.photoUrl" placeholder="貼上網址" class="bg-transparent text-xs text-purple-700 outline-none w-full placeholder:text-purple-200">
+
+                            <a v-if="isValidUrl(currentDay.photoUrl)" :href="currentDay.photoUrl" target="_blank" class="text-[10px] text-purple-500 underline mt-1 block">開啟相簿 <i class="fa-solid fa-arrow-up-right-from-square text-[8px]"></i></a>
+
+                        </div>
+
+                    </div>
+
+                    <div class="space-y-4" v-if="currentDay">
+
+                        <div v-for="(route, rIdx) in currentDay.routes" :key="rIdx" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-50 flex gap-4">
+
+                            <input v-model="route.time" type="time" class="text-xs font-bold text-indigo-500 outline-none">
+
+                            <div class="flex-1">
+
+                                <input v-model="route.place" placeholder="在哪裡？" class="w-full font-bold text-sm outline-none mb-1">
+
+                                <input v-model="route.desc" placeholder="想記下的心情或備註" class="w-full text-xs text-gray-400 outline-none">
+
+                            </div>
+
+                            <button @click="currentDay.routes.splice(rIdx, 1)" class="text-gray-200"><i class="fa-solid fa-trash"></i></button>
+
+                        </div>
+
+                        <button @click="addRoute" class="w-full py-3 rounded-2xl border-2 border-dashed border-gray-100 text-gray-300 text-xs">+ 新增景點項目</button>
+
+                    </div>
+
+                </div>
+
+                <!-- 記帳分頁 -->
+
+                <div v-if="activeTab === 'expenses'" class="animate-slide-up space-y-6">
+
+                    <div class="bg-emerald-50 p-5 rounded-3xl">
+
+                        <div class="flex justify-between items-center mb-4">
+
+                            <h3 class="font-bold text-emerald-800">分帳與預算</h3>
+
+                            <button @click="addExpense" class="bg-emerald-600 text-white text-xs px-3 py-1 rounded-full">+ 記一筆</button>
+
+                        </div>
+
+                        <div class="space-y-3 max-h-64 overflow-y-auto no-scrollbar">
+
+                            <div v-for="(exp, eIdx) in currentTrip.expenses" :key="eIdx" class="bg-white p-3 rounded-xl flex items-center gap-3">
+
+                                <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs">
+
+                                    <i :class="getCategoryIcon(exp.category)"></i>
+
+                                </div>
+
+                                <div class="flex-1">
+
+                                    <input v-model="exp.name" class="w-full text-xs font-bold outline-none" placeholder="項目">
+
+                                    <div class="flex items-center gap-2 mt-1">
+
+                                        <select v-model="exp.category" class="text-[9px] bg-gray-50 rounded px-1">
+
+                                            <option v-for="c in categories" :value="c">{{ c }}</option>
+
+                                        </select>
+
+                                        <span class="text-[10px] text-gray-300">|</span>
+
+                                        <select v-model="exp.payer" class="text-[9px] bg-gray-50 rounded px-1">
+
+                                            <option v-for="p in currentTrip.people" :value="p">{{ p }}</option>
+
+                                        </select>
+
+                                    </div>
+
+                                </div>
+
+                                <div class="text-right">
+
+                                    <div class="flex items-center text-emerald-600 font-bold text-sm">
+
+                                        <span class="text-[10px] mr-1">RM</span>
+
+                                        <input v-model.number="exp.amount" type="number" class="w-16 bg-transparent text-right outline-none">
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    
+
+                    <!-- 分帳結果 -->
+
+                    <div class="bg-indigo-900 text-white p-5 rounded-3xl shadow-xl">
+
+                        <h4 class="text-xs font-bold opacity-60 uppercase mb-4 tracking-widest">Settlement / 結算清單</h4>
+
+                        <div class="space-y-2">
+
+                            <div v-for="s in settlements" class="flex justify-between p-2 bg-white/5 rounded-lg text-xs">
+
+                                <span>{{ s.from }} ➜ {{ s.to }}</span>
+
+                                <span class="font-bold text-indigo-300">RM {{ s.amount }}</span>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </main>
+
+        <!-- Trip List Overlay -->
+
+        <div v-if="showTripList" class="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4" @click="showTripList = false">
+
+            <div class="bg-white w-full max-w-md rounded-3xl p-6 h-[80vh] flex flex-col" @click.stop>
+
+                <div class="flex justify-between items-center mb-6">
+
+                    <h2 class="text-xl font-black">所有旅程存檔</h2>
+
+                    <button @click="createNewTrip" class="bg-indigo-600 text-white text-xs px-4 py-2 rounded-full">+ 新增國家</button>
+
+                </div>
+
+                <div class="flex-1 overflow-y-auto space-y-4 no-scrollbar">
+
+                    <div v-for="trip in allTrips" :key="trip.id" 
+
+                         @click="selectTrip(trip)"
+
+                         class="p-4 rounded-2xl border-2 transition-all flex justify-between items-center cursor-pointer"
+
+                         :class="currentTrip.id === trip.id ? 'border-indigo-600 bg-indigo-50' : 'border-gray-100 bg-white'">
+
+                        <div>
+
+                            <h4 class="font-bold">{{ trip.destination }}</h4>
+
+                            <p class="text-[10px] text-gray-400">{{ trip.days?.length || 0 }} 天行程 · {{ trip.expenses?.length || 0 }} 筆支出</p>
+
+                        </div>
+
+                        <i class="fa-solid fa-chevron-right text-gray-300"></i>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- AI Loading Overlay -->
+
+        <div v-if="isAiLoading" class="fixed inset-0 bg-indigo-900/20 backdrop-blur-sm z-[100] flex items-center justify-center">
+
+            <div class="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center">
+
+                <div class="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+
+                <p class="text-xs font-bold text-indigo-600">PAPAGO AI 正在規劃中...</p>
+
+            </div>
+
+        </div>
+
+        <!-- Tab Bar -->
+
+        <nav class="absolute bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md h-20 border-t border-gray-100 flex justify-around items-center px-6 tab-shadow z-40">
+
+            <button @click="activeTab = 'routes'" :class="activeTab === 'routes' ? 'text-indigo-600' : 'text-gray-300'">
+
+                <i class="fa-solid fa-map-location-dot text-xl"></i>
+
+                <p class="text-[9px] font-bold mt-1">行程</p>
+
+            </button>
+
+            <button @click="activeTab = 'expenses'" :class="activeTab === 'expenses' ? 'text-indigo-600' : 'text-gray-300'">
+
+                <i class="fa-solid fa-wallet text-xl"></i>
+
+                <p class="text-[9px] font-bold mt-1">分帳</p>
+
+            </button>
+
+            <button @click="activeTab = 'checklist'" :class="activeTab === 'checklist' ? 'text-indigo-600' : 'text-gray-300'">
+
+                <i class="fa-solid fa-suitcase text-xl"></i>
+
+                <p class="text-[9px] font-bold mt-1">清單</p>
+
+            </button>
+
+        </nav>
+
+    </div>
+
+    <script>
+
+        const { createApp, ref, computed, watch, onMounted } = Vue;
+
+        const apiKey = ""; 
+
+        createApp({
+
+            setup() {
+
+                const activeTab = ref('routes');
+
+                const selectedDayIdx = ref(0);
+
+                const showTripList = ref(false);
+
+                const isAiLoading = ref(false);
+
+                const categories = ['美食', '交通', '住宿', '伴手禮', '景點'];
+
+                const allTrips = ref([]);
+
+                const currentTripId = ref(null);
+
+                const getInitialTrip = (dest = '馬來西亞') => ({
+
+                    id: Date.now(),
+
+                    destination: dest,
+
+                    exchangeRate: 7.2,
+
+                    people: ['我', '旅伴A'],
+
+                    days: [{ weather: {}, photoUrl: '', routes: [{ time: '12:00', place: '開始旅程', desc: '開始 Papago！' }] }],
+
+                    expenses: [],
+
+                    checklist: []
+
+                });
+
+                const currentTrip = computed(() => {
+
+                    const found = allTrips.value.find(t => t.id === currentTripId.value);
+
+                    return found || allTrips.value[0] || {};
+
+                });
+
+                const currentDay = computed(() => {
+
+                    if (!currentTrip.value || !currentTrip.value.days) return null;
+
+                    return currentTrip.value.days[selectedDayIdx.value] || currentTrip.value.days[0] || null;
+
+                });
+
+                onMounted(() => {
+
+                    const saved = localStorage.getItem('papago_v1');
+
+                    if (saved) {
+
+                        try {
+
+                            const parsed = JSON.parse(saved);
+
+                            allTrips.value = parsed.trips || [];
+
+                            currentTripId.value = parsed.currentId;
+
+                        } catch (e) {
+
+                            console.error("Failed to parse saved data", e);
+
+                        }
+
+                    }
+
+                    if (allTrips.value.length === 0) {
+
+                        const first = getInitialTrip();
+
+                        allTrips.value.push(first);
+
+                        currentTripId.value = first.id;
+
+                    }
+
+                });
+
+                watch(allTrips, (newVal) => {
+
+                    localStorage.setItem('papago_v1', JSON.stringify({
+
+                        trips: newVal,
+
+                        currentId: currentTripId.value
+
+                    }));
+
+                }, { deep: true });
+
+                const totalExpensesTWD = computed(() => {
+
+                    if (!currentTrip.value || !currentTrip.value.expenses) return 0;
+
+                    const rm = currentTrip.value.expenses.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+
+                    return (rm * currentTrip.value.exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+                });
+
+                const settlements = computed(() => {
+
+                    if (!currentTrip.value || !currentTrip.value.expenses || currentTrip.value.expenses.length === 0) return [];
+
+                    const total = currentTrip.value.expenses.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+
+                    const perPerson = total / currentTrip.value.people.length;
+
+                    const balances = {};
+
+                    currentTrip.value.people.forEach(p => balances[p] = -perPerson);
+
+                    currentTrip.value.expenses.forEach(e => { if(balances[e.payer] !== undefined) balances[e.payer] += (Number(e.amount) || 0); });
+
+                    
+
+                    const creditors = [], debtors = [];
+
+                    Object.keys(balances).forEach(p => {
+
+                        if (balances[p] > 0.1) creditors.push({ name: p, amt: balances[p] });
+
+                        else if (balances[p] < -0.1) debtors.push({ name: p, amt: Math.abs(balances[p]) });
+
+                    });
+
+                    const res = [];
+
+                    let ci = 0, di = 0;
+
+                    while (ci < creditors.length && di < debtors.length) {
+
+                        const amt = Math.min(creditors[ci].amt, debtors[di].amt);
+
+                        res.push({ from: debtors[di].name, to: creditors[ci].name, amount: amt.toFixed(2) });
+
+                        creditors[ci].amt -= amt; debtors[di].amt -= amt;
+
+                        if (creditors[ci].amt < 0.1) ci++; if (debtors[di].amt < 0.1) di++;
+
+                    }
+
+                    return res;
+
+                });
+
+                const createNewTrip = () => {
+
+                    const dest = prompt("下一個要去哪個國家？", "日本");
+
+                    if (dest) {
+
+                        const nt = getInitialTrip(dest);
+
+                        allTrips.value.push(nt);
+
+                        currentTripId.value = nt.id;
+
+                        showTripList.value = false;
+
+                        activeTab.value = 'routes';
+
+                        selectedDayIdx.value = 0;
+
+                    }
+
+                };
+
+                const selectTrip = (trip) => {
+
+                    currentTripId.value = trip.id;
+
+                    showTripList.value = false;
+
+                    selectedDayIdx.value = 0;
+
+                };
+
+                const addNewDay = () => {
+
+                    if (!currentTrip.value.days) currentTrip.value.days = [];
+
+                    currentTrip.value.days.push({ weather: {}, photoUrl: '', routes: [] });
+
+                    selectedDayIdx.value = currentTrip.value.days.length - 1;
+
+                };
+
+                const addRoute = () => {
+
+                    if (currentDay.value) {
+
+                        if (!currentDay.value.routes) currentDay.value.routes = [];
+
+                        currentDay.value.routes.push({ time: '10:00', place: '', desc: '' });
+
+                    }
+
+                };
+
+                const addExpense = () => {
+
+                    if (!currentTrip.value.expenses) currentTrip.value.expenses = [];
+
+                    currentTrip.value.expenses.unshift({ name: '', amount: 0, payer: currentTrip.value.people[0], category: '美食' });
+
+                };
+
+                
+
+                const isValidUrl = (url) => {
+
+                    if (!url) return false;
+
+                    try { new URL(url); return true; } catch (_) { return false; }
+
+                };
+
+                const getCategoryIcon = (cat) => ({
+
+                    '美食': 'fa-utensils', '交通': 'fa-bus', '住宿': 'fa-bed', '伴手禮': 'fa-bag-shopping', '景點': 'fa-camera'
+
+                }[cat] || 'fa-receipt');
+
+                const getAiWeather = async (idx) => {
+
+                    if (!currentTrip.value.destination) return;
+
+                    isAiLoading.value = true;
+
+                    try {
+
+                        const prompt = `分析${currentTrip.value.destination}當前可能的旅遊氣象與穿搭(JSON): {"temp":"...","desc":"...","outfit":"..."}`;
+
+                        const res = await callGemini(prompt);
+
+                        const data = JSON.parse(res.replace(/```json|```/g, ''));
+
+                        if (currentTrip.value.days[idx]) {
+
+                            currentTrip.value.days[idx].weather = data;
+
+                        }
+
+                    } catch (e) {
+
+                        console.error("AI Weather error", e);
+
+                    } finally { isAiLoading.value = false; }
+
+                };
+
+                async function callGemini(p) {
+
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+                    const r = await fetch(url, { method: 'POST', body: JSON.stringify({ contents: [{ parts: [{ text: p }] }] }) });
+
+                    const d = await r.json();
+
+                    return d.candidates[0].content.parts[0].text;
+
+                }
+
+                return {
+
+                    activeTab, selectedDayIdx, showTripList, isAiLoading, allTrips, currentTrip, currentDay,
+
+                    totalExpensesTWD, settlements, categories,
+
+                    createNewTrip, selectTrip, addNewDay, addRoute, addExpense, isValidUrl, getCategoryIcon, getAiWeather
+
+                };
+
+            }
+
+        }).mount('#app');
+
+    </script>
+
+</body>
+
+</html>
